@@ -72,15 +72,13 @@ Find me on:
 
 [TO DO LIST / PRIORITY]
 HIGH - Need change script to module EXO v2 and remove basic auth.  
+HIGH - Misses E5 Mailboxes Auditing MailboxLogin
 MED - Add [-AllMailboxes <Boolean>] [-DeltaSync <String>]
 MED - Check any for any custom Admin changes
 #>
 
 Param 
 (
-    [Parameter(Mandatory = $False)]
-    [ValidateNotNullOrEmpty()]
-    [Boolean]$AllMailboxes,
     [Parameter(Mandatory = $False)]
     [ValidateNotNullOrEmpty()]
     [Boolean]$EnableMailboxLoginAudit,
