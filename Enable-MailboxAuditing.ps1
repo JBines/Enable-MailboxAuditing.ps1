@@ -8,7 +8,8 @@ This script automates the enabling of the default audit value on mailboxes in Ex
  
  Unless you have assigned a E5 License to the mailbox.  
 
-## Enable-MailboxAuditing.ps1 [-EnableMailboxLoginAudit <Boolean>] [-DifferentialScope <Int>] [-AutomationPSCredential <String>] [-WhatIf <Switch>] 
+## Enable-MailboxAuditing.ps1 [-EnableMailboxLoginAudit <Boolean>] [-DifferentialScope <Int>] [-AutomationPSCredential <String>] 
+[-WhatIf <Switch>] [-EXOOrganization <string[*.onmicrosoft.com]>] [-EXOAutomationPSConnection <string[Name]>]
 
 .PARAMETER EnableMailboxLoginAudit
  The EnableMailboxLoginAudit parameter adds to the audit log MailboxLogin for the AuditOwner. 
@@ -34,6 +35,19 @@ This script automates the enabling of the default audit value on mailboxes in Ex
 
  This account must have the access to Read | Write to Mailbox Users. 
 
+ .PARAMETER EXOOrganization
+The CertificateOrganization parameter identifies the tenant Microsoft address. For example 
+'consto.onmicrosoft.com' Parameter must be used with -EXOAutomationPSCertificate & -EXOAutomationPSConnection. 
+
+.PARAMETER EXOAutomationPSConnection
+ The AutomationPSConnection parameter defines the connection details such as AppID, Tenant ID. 
+ Parameter must be used with -EXOAutomationPSCertificate & -EXOOrganization. 
+    In your Azure Automation Account:
+        1. Connections
+        2. Add a Connection 
+        3. Select AzureServicePrincipal
+        4. Fill in require fields 
+
 .EXAMPLE
  Enable-MailboxAuditing.ps1 -EnableMailboxLoginAudit:$true -WhatIf 
 
@@ -41,6 +55,13 @@ This script automates the enabling of the default audit value on mailboxes in Ex
 
  In this example the script will make no changes to the mailbox instead testing enabling for all mailboxes.
  Once you are happy with the result remove the mailbox -WhatIf switch to apply the real settings. 
+
+.EXAMPLE
+ Enable-MailboxAuditing.ps1 -EnableMailboxLoginAudit:$true -EXOOrganization contso.onmicrosoft.com -EXOAutomationPSConnection "ExchangeOnlineApp"
+
+ -- APP ONLY IN AZURE AUTOMATION --
+
+ In this example the script will enable all mailboxes with auditing including the switch to log the last logon user to the mailbox. 
 
 .LINK
 
@@ -69,9 +90,10 @@ Find me on:
 1.0.1 20190221 - Scott Bueffel - https://github.com/o365soa/Scripts/blob/master/Configure-MailboxAuditing.ps1
 1.0.2 20200811 - JBINES - [FEATURE] Added AzureAutomation Support, changed the mailbox filter and a few UI changes just for kicks. 
 1.0.3 20200811 - JBINES - [FEATURE] Added support for logining 'MailboxLogin' which is not enabled by default.
+1.0.4 20220104 - JBINES - [FEATURE] Added support for module EXO v2 & Modern App Only runtime access.
+
 
 [TO DO LIST / PRIORITY]
-HIGH - Need change script to module EXO v2 and remove basic auth.  
 HIGH - Misses E5 Mailboxes Auditing MailboxLogin
 MED - Add [-AllMailboxes <Boolean>] [-DeltaSync <String>]
 MED - Check any for any custom Admin changes
@@ -90,6 +112,13 @@ Param
     [String]$AutomationPSCredential,
     [Parameter(Mandatory = $False)]
     [ValidateNotNullOrEmpty()]
+    [String]$EXOAutomationPSConnection,
+    [Parameter(Mandatory = $False)]
+    [ValidatePattern('(?i)\S\.onmicrosoft.com$')]
+    [ValidateNotNullOrEmpty()]
+    [String]$EXOOrganization,
+    [Parameter(Mandatory = $False)]
+    [ValidateNotNullOrEmpty()]
     [Switch]$WhatIf
 )
 
@@ -103,6 +132,7 @@ Param
     $iString0 = "Collecting STARTED - Where Mailboxes AuditEnabled -ne 'true'"
     $iString1 = "Collecting COMPLETED - Mailboxes Found: "
     $iString2 = "Processing Mailboxes"
+    $iString3 = "Hey! No mailboxes found which need AuditEnabled. Let's end this here"
 
     # Warn Strings
     $wString0 = ""
@@ -136,28 +166,46 @@ Param
            }
            if ($Message -ne $null -and $Message.Length -gt 0)
            {
-                  $TimeStamp = [System.DateTime]::Now.ToString("yyyy-MM-dd HH:mm:ss")
-                  if ($LogFile -ne $null -and $LogFile -ne [System.String]::Empty)
-                  {
-                         Out-File -Append -FilePath $LogFile -InputObject "[$TimeStamp] [$LogLevel] $Message"
-                  }
-                  if ($ConsoleOutput -eq $true)
-                  {
-                         Write-Host "[$TimeStamp] [$LogLevel] :: $Message" -ForegroundColor $Color
+                $TimeStamp = [System.DateTime]::Now.ToString("yyyy-MM-dd HH:mm:ss")
+                if ($LogFile -ne $null -and $LogFile -ne [System.String]::Empty)
+                {
+                        Out-File -Append -FilePath $LogFile -InputObject "[$TimeStamp] [$LogLevel] $Message"
+                }
+                if ($ConsoleOutput -eq $true)
+                {
+                    Write-Host "[$TimeStamp] [$LogLevel] :: $Message" -ForegroundColor $Color
 
-                    if($AutomationPSCredential)
+                    if($AutomationPSCredential -or $EXOAutomationPSConnection)
                     {
-                         Write-Output "[$TimeStamp] [$LogLevel] :: $Message"
-                    } 
-                  }
+                        Write-Output "[$TimeStamp] [$LogLevel] :: $Message"
+                    }
+                }
+                if($LogLevel -eq "ERROR")
+                {
+                        Write-Error "[$TimeStamp] [$LogLevel] :: $Message"
+                }
            }
     }
 
     #Validate Input Values From Parameter 
 
     Try{
+        
+        If($EXOAutomationPSConnection -and $EXOOrganization){
+            
+            #Connect Exchange
+            $EXOConnection = Get-AutomationConnection -Name $EXOAutomationPSConnection
+            #Connect-ExchangeOnline -CertificateThumbprint $EXOCert.Thumbprint -AppId $EXOAppId -ShowBanner:$false -Organization $EXOCertificateOrganization
+            Connect-ExchangeOnline -CertificateThumbprint $EXOConnection.CertificateThumbprint -AppId $EXOConnection.ApplicationId -Organization $EXOOrganization -ShowBanner:$false
+            
+        }
+        Else
+        {
+            Remove-Variable EXOAutomationPSConnection
+            Remove-Variable EXOORGANIZATION
+        }
 
-        if ($AutomationPSCredential) {
+        if ($AutomationPSCredential -and (-not($EXOAutomationPSConnection))) {
             
             $Credential = Get-AutomationPSCredential -Name $AutomationPSCredential
 
@@ -166,12 +214,12 @@ Param
             $ExchangeOnlineSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $Credential -Authentication Basic -AllowRedirection -Name $ConnectionName 
             Import-Module (Import-PSSession -Session $ExchangeOnlineSession -AllowClobber -DisableNameChecking) -Global
 
-            }
+        }
 
         Write-Log -Message "$iString0" -LogLevel INFO -ConsoleOutput
         
         #Get All Mailboxes without 
-        $Mailboxes = Get-Mailbox -Filter "AuditEnabled -ne '$true' -and PersistedCapabilities -ne 'BPOS_S_EquivioAnalytics' -and PersistedCapabilities -ne 'M365Auditing'"
+        $Mailboxes = Get-Mailbox -Filter "AuditEnabled -ne '$true' -and (PersistedCapabilities -ne 'BPOS_S_EquivioAnalytics') -and (PersistedCapabilities -ne 'M365Auditing')" #-ResultSize Unlimited
 
         #Check if Owners Group is $Null
         $MailboxesNull = $False
@@ -180,7 +228,7 @@ Param
             $MailboxesNull = $True
             If($?){
                 
-                Write-Log -Message $eString1 -LogLevel ERROR -ConsoleOutput
+                Write-Log -Message $iString3 -LogLevel INFO -ConsoleOutput
                 Break
 
             }
@@ -242,5 +290,4 @@ Param
 
         }  
     }
-
 
