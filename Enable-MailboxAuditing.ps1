@@ -16,6 +16,12 @@ This script automates the enabling of the default audit value on mailboxes in Ex
  The default audit logging flag does not track owner login events. This can be enabled manually
  and is recommended for most enviroments unless there are other constraints.     
 
+ .PARAMETER DisableRemotePowerShell
+ The DisableRemotePowerShell parameter limits the use of Exchange Online Remote
+ PowerShell. Removing users to ability to connect to remote PowerShell reduces attack 
+ vectors by limiting options for data exports typically completed for extracting directory 
+ information. 
+
 .PARAMETER WhatIf
  The WhatIf switch simulates the actions of the command. You can use this switch to view the 
  changes that would occur without actually applying those changes. You don't need to specify 
@@ -57,7 +63,7 @@ The CertificateOrganization parameter identifies the tenant Microsoft address. F
  Once you are happy with the result remove the mailbox -WhatIf switch to apply the real settings. 
 
 .EXAMPLE
- Enable-MailboxAuditing.ps1 -EnableMailboxLoginAudit:$true -EXOOrganization contso.onmicrosoft.com -EXOAutomationPSConnection "ExchangeOnlineApp"
+ Enable-MailboxAuditing.ps1 -EnableMailboxLoginAudit:$true -DisableRemotePowerShell:$true -EXOOrganization contso.onmicrosoft.com -EXOAutomationPSConnection "ExchangeOnlineApp"
 
  -- APP ONLY IN AZURE AUTOMATION --
 
@@ -91,6 +97,7 @@ Find me on:
 1.0.2 20200811 - JBINES - [FEATURE] Added AzureAutomation Support, changed the mailbox filter and a few UI changes just for kicks. 
 1.0.3 20200811 - JBINES - [FEATURE] Added support for logining 'MailboxLogin' which is not enabled by default.
 1.0.4 20220104 - JBINES - [FEATURE] Added support for module EXO v2 & Modern App Only runtime access.
+1.0.5 20220613 - JBINES - [FEATURE] Added switch for Disabling Remote PowerShell to Exchange Online. 
 
 
 [TO DO LIST / PRIORITY]
@@ -104,6 +111,9 @@ Param
     [Parameter(Mandatory = $False)]
     [ValidateNotNullOrEmpty()]
     [Boolean]$EnableMailboxLoginAudit,
+	[Parameter(Mandatory = $False)]
+    [ValidateNotNullOrEmpty()]
+    [Boolean]$DisableRemotePowerShell,
     [Parameter(Mandatory = $False)]
     [ValidateNotNullOrEmpty()]
     [Int]$DifferentialScope = 100,
@@ -262,6 +272,11 @@ Param
                     if($?){Write-Log -Message "$counter;$sString0;AuditOwner:add=MailboxLogin;UPN:$($mbx.UserPrincipalName);ObjectId:$($mbx.Guid)" -LogLevel SUCCESS -ConsoleOutput}
                 }
 
+				if($DisableRemotePowerShell){
+                    Set-User -Identity $mbx.Guid.ToString() -RemotePowerShellEnabled $false -WhatIf
+                    if($?){Write-Log -Message "$counter;$sString0;DisableRemotePowerShell:true;UPN:$($mbx.UserPrincipalName);ObjectId:$($mbx.Guid)" -LogLevel SUCCESS -ConsoleOutput}
+                }				
+
                 #Increase the count post change
                 $counter++
             }
@@ -277,6 +292,12 @@ Param
                     Set-Mailbox -Identity $mbx.Guid.ToString() -AuditOwner @{add='MailboxLogin'}
                     if($?){Write-Log -Message "$sString0;AuditOwner:add=MailboxLogin;UPN:$($mbx.UserPrincipalName);ObjectId:$($mbx.Guid)" -LogLevel SUCCESS -ConsoleOutput}
                 }
+
+				if($DisableRemotePowerShell){
+                    Set-User -Identity $mbx.Guid.ToString() -RemotePowerShellEnabled $false
+                    if($?){Write-Log -Message "$sString0;DisableRemotePowerShell:true;UPN:$($mbx.UserPrincipalName);ObjectId:$($mbx.Guid)" -LogLevel SUCCESS -ConsoleOutput}
+                }				
+
 
                 #Increase the count post change
                 $counter++
